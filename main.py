@@ -30,12 +30,7 @@ def load_dataset_from_dir(dir_path):
 def load_dataset(dir_path_list):
     tmp = []
     for dir_path in dir_path_list:
-        print("load data from {}".format(dir_path))
-        for i in os.listdir(dir_path):
-            if i.find("jpg") != -1:
-                image = cv2.imread(os.path.join(dir_path, i))
-                resized = cv2.resize(image, (64, 64))
-                tmp.append((resized / 127.5) - 1)
+        tmp += load_dataset_from_dir(dir_path)
     array_data = np.asarray(tmp, dtype=np.float32)
     datasets = np.rollaxis(array_data, 3, 1)
     tmp = np.copy(datasets)
@@ -82,7 +77,6 @@ class Generator(nn.Module):
     def forward(self, x):
         x = x.view(-1, self.z_dim, 1, 1)
         x = F.relu(self.bn1(self.dconv1(x)))
-        # x = x.view(-1, self.z_dim, 4, 4)
         x = F.relu(self.bn2(self.dconv2(x)))
         x = F.relu(self.bn3(self.dconv3(x)))
         x = F.relu(self.bn4(self.dconv4(x)))
@@ -137,10 +131,7 @@ def train(dir_path, epochs=100, batch_size=100, z_dim=100, generator_train_times
     train_x = load_dataset(dir_path)
     nb_train_x = len(train_x)
     nb_batchs = nb_train_x // batch_size
-    """
-    trainloader = torch.utils.data.DataLoader(
-        train_x, batch_size=batch_size, shuffle=True, num_workers=2)
-    """
+
     generator = Generator(z_dim)
     discriminator = Discriminator()
     dcgan = DCGAN(generator, discriminator)
@@ -158,7 +149,7 @@ def train(dir_path, epochs=100, batch_size=100, z_dim=100, generator_train_times
 
     for epoch in range(1, epochs + 1):
         print("----------------------------------------")
-        print("------epoch {}--------------------------".format(epoch))
+        print("------epoch {}---------------------------".format(epoch))
         print("----------------------------------------")
         np.random.shuffle(train_x)
         g_loss_sum = 0
@@ -169,7 +160,6 @@ def train(dir_path, epochs=100, batch_size=100, z_dim=100, generator_train_times
 
         # for batch_index, data_x in enumerate(trainloader):
         for batch_index in range(nb_batchs):
-            #print("batch {}".format(batch_index))
             data_x = train_x[batch_index * batch_size:(batch_index + 1) * batch_size]
             data_x = nparray_to_cuda_variable(data_x)
             data_z = nparray_to_cuda_variable(
@@ -211,21 +201,22 @@ def train(dir_path, epochs=100, batch_size=100, z_dim=100, generator_train_times
             d_fake_acc = correct / batch_size
 
             d_acc = (d_real_acc + d_fake_acc) / 2
-            """
+
             print("g_loss: {}, g_acc: {}".format(
                 g_loss.data[0], g_acc))
-            print("d_real_loss: {}, d_fake_loss: {}, d_acc: {}".format(
-                d_real_loss.data[0], d_fake_loss.data[0], d_acc))
-            """
+            print("d_real_loss: {}, d_fake_loss: {}".format(
+                d_real_loss.data[0], d_fake_loss.data[0]))
+            print("d_real_acc: {}, d_fake_acc: {}, d_acc: {}".format(d_real_acc,d_fake_acc, d_acc))
+
             g_loss_sum += g_loss.data[0]
             d_fake_loss_sum += d_fake_loss.data[0]
             d_real_loss_sum += d_real_loss.data[0]
             g_acc_sum += g_acc
             d_acc_sum += d_acc
         print("epoch {} summary".format(epoch))
-        print("generator loss: {}, generator acc: {}".format(g_loss_sum, g_acc_sum / nb_batchs))
-        print("discriminator real loss: {}, discriminator fake loss: {}\ndiscriminator acc: {}".format(
-            d_real_loss_sum, d_fake_loss_sum, d_acc_sum / nb_batchs))
+        print("generator loss: {}, generator acc: {}".format(g_loss_sum/nb_batchs, g_acc_sum / nb_batchs))
+        print("discriminator real loss: {}, discriminator fake loss: {}\n discriminator acc: {}".format(
+            d_real_loss_sum/nb_batchs, d_fake_loss_sum/nb_batchs, d_acc_sum / nb_batchs))
         if epoch % 10 == 0:
             generated_images = dcgan.generator(const_data_z)
             vutils.save_image(generated_images.data, os.path.join(
